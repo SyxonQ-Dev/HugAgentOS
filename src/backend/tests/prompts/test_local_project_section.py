@@ -60,3 +60,40 @@ def test_local_section_handles_missing_path_and_slug():
         project_name="", project_instructions="", local_path="", local_slug=""
     )
     assert "本地项目模式" in s  # renders even without a resolved path
+
+
+# ── 未绑项目时的默认工作根 ────────────────────────────────────────────────
+
+
+def test_default_workspace_section_states_the_root():
+    """没绑项目也有工作根，一句话说清在哪儿即可。"""
+    from prompts.project_section import _build_default_workspace_section
+
+    s = _build_default_workspace_section("/Users/alice/.hugagent/workspace/.sessions/abc")
+
+    assert s == "当前处于默认工作目录 /Users/alice/.hugagent/workspace/.sessions/abc"
+
+
+def test_default_workspace_section_is_empty_without_a_root():
+    from prompts.project_section import _build_default_workspace_section
+
+    assert _build_default_workspace_section("") == ""
+
+
+def test_default_workspace_only_appears_in_local_mode_without_a_project(monkeypatch):
+    """云端形态不注入；绑了项目也不注入（那时给的是项目文件夹）。"""
+    import core.config.local_mode as local_mode
+    from prompts.prompt_config import PromptConfig
+    from prompts.prompt_runtime import build_system_prompt
+
+    monkeypatch.setattr("core.sandbox._common.WORKSPACE", "/tmp/ws-under-test")
+
+    for local, project_id, expect in ((True, None, True), (False, None, False), (True, "p1", False)):
+        monkeypatch.setattr(local_mode, "local_mode_enabled", lambda local=local: local)
+        ctx = {"chat_id": "chat-%s-%s" % (local, project_id)}
+        if project_id:
+            ctx["project_id"] = project_id
+        prompt = build_system_prompt(PromptConfig(), ctx)
+        assert ("当前处于默认工作目录" in prompt) is expect, (local, project_id)
+        if expect:
+            assert "/tmp/ws-under-test" in prompt

@@ -19,6 +19,16 @@ class SiteUploadOptions(SitePublishScopeFields):
     description: str = Field("", max_length=2000)
 
 
+def _session_workspace_root(chat_id: str | None) -> str | None:
+    """这个会话的工作目录。"""
+    if not chat_id:
+        return None
+    from core.sandbox._common import WORKSPACE
+    from services.script_runner_service.workspace_paths import session_root
+
+    return session_root(WORKSPACE, str(chat_id))
+
+
 async def package_local_site(arguments, headers):
     """Read the current local sandbox, never a path on the remote backend."""
     from core.config.local_mode import local_mode_enabled
@@ -58,8 +68,13 @@ async def package_local_site(arguments, headers):
     # necessarily under the managed scratch workspace (e.g. Windows Desktop).
     # Keep containment checks; authorize only the current owned project's root.
     roots = (project_dir,) if local_mode_enabled() and project_dir else ()
-    error = _validate_workspace_path(src + "/", additional_roots=roots)
+    error = _validate_workspace_path(
+        src + "/", root=_session_workspace_root(chat_id), additional_roots=roots
+    )
     if error:
+        if project_dir:
+            # 报错要说出边界在哪，否则调用方只能一条条猜路径。
+            raise ValueError(f"站点目录必须位于 {project_dir} 内，当前传入的是 {src}。")
         raise ValueError(error)
     source = str(arguments.get("source_dir") or "").strip().rstrip("/")
     if source and source == src:

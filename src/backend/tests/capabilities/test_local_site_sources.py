@@ -183,9 +183,9 @@ def test_source_must_already_be_inside_local_project(local_project):
     outside = root.parent / "scratch-site"
     outside.mkdir()
     (outside / "index.html").write_text("scratch")
-    with pytest.raises(ValueError, match="当前本地项目"):
+    with pytest.raises(ValueError, match="必须位于"):
         validate_source("owner", "chat", str(outside), str(root))
-    with pytest.raises(ValueError, match="当前本地项目"):
+    with pytest.raises(ValueError, match="必须位于"):
         validate_source("owner", "chat", str(root), str(outside))
     assert validate_source("owner", "chat", str(root), str(root))["project_id"] == "project"
 

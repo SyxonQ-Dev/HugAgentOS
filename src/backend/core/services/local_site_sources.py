@@ -291,17 +291,20 @@ def validate_source(user_id: str, chat_id: str, source: str, publish_dir: str) -
         if not chat or chat.user_id != user_id or chat.deleted_at is not None:
             raise HTTPException(403, "站点发布需要当前用户的有效会话")
     project_id, project_dir = resolve_project_context(chat_id, user_id)
-    if not project_id or not project_dir:
-        raise ValueError("请先选择本地项目，再在项目内创建站点")
-    with SessionLocal() as db:
-        project = ProjectSourceService(db).authorized_project(project_id, user_id, write=True)
-        if project.kind != "local":
-            raise ValueError("桌面站点必须使用本地项目")
-    root = Path(project_dir).resolve()
+    if project_id and project_dir:
+        with SessionLocal() as db:
+            project = ProjectSourceService(db).authorized_project(project_id, user_id, write=True)
+            if project.kind != "local":
+                raise ValueError("桌面站点必须使用本地项目")
+        root = Path(project_dir).resolve()
+    else:
+        from core.services.desktop_site_publish import _session_workspace_root
+
+        root = Path(_session_workspace_root(chat_id) or "").resolve()
     paths = [Path(source), Path(publish_dir)]
     for path in paths:
         if not path.is_absolute() or not path.is_dir() or not path.resolve().is_relative_to(root):
-            raise ValueError("站点源码和构建产物必须位于当前本地项目内")
+            raise ValueError(f"站点源码和构建产物必须位于 {root} 内，当前传入的是 {path}。")
     return {
         "project_id": project_id,
         "source_dir": str(paths[0].resolve()),
