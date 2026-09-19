@@ -190,14 +190,14 @@ def test_source_must_already_be_inside_local_project(local_project):
     assert validate_source("owner", "chat", str(root), str(root))["project_id"] == "project"
 
 
-def test_local_publish_requires_project_chat(local_project, monkeypatch):
+def test_local_publish_requires_current_chat(local_project, monkeypatch):
     from core.services.desktop_site_publish import package_local_site
 
     async def unexpected_pack(*args, **kwargs):
         pytest.fail("must reject before reading files")
 
     monkeypatch.setattr("core.services.site_packaging.pack_and_fetch_dir", unexpected_pack)
-    with pytest.raises(ValueError, match="已绑定本地项目的会话"):
+    with pytest.raises(ValueError, match="当前会话标识"):
         asyncio.run(package_local_site({}, {"x-current-user-id": "owner"}))
 
 
