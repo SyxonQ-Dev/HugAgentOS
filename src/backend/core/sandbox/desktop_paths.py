@@ -49,3 +49,14 @@ def validate_project_scope_path(path, project_folder_name):
 
 def is_myspace_physical(path, user_id, root):
     return False
+
+
+def bash_workspace_instructions(root: str, session_id: str | None) -> str:
+    cwd = workspace_directory(root, session_id)
+    return (
+        "在本机执行 Bash 命令。\n\n"
+        f"当前会话默认工作目录：{cwd}。相对路径以此为准，跨轮保持不变。\n"
+        "绑定本机项目时以该项目的真实目录为准。查询实际目录可执行 pwd。\n"
+        "技能文件使用技能列表提供的真实路径；输入输出可使用工作目录相对路径。\n"
+        "本机文件不会通过 /myspace 自动同步；需要下载链接时使用 sandbox_get_artifact。\n\n"
+    )

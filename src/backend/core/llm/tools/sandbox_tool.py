@@ -246,21 +246,9 @@ def register_bash(
 
         return _resp_json(payload)
 
-    from core.sandbox._common import WORKSPACE as _WS
+    from ._paths import WORKSPACE_ROOT, path_rules
 
-    bash.__doc__ = (
-        "在沙盒里执行一条 shell 命令（默认 bash 解释器）。\n\n"
-        "约定：\n"
-        f"- 工作目录默认 {_WS}。已加载的技能文件位于 {_WS}/skills/<skill_id>/，\n"
-        f'  典型用法：bash(command="cd {_WS}/skills/<id> && bash scripts/foo.sh")。\n'
-        "- 用户「我的空间」在沙盒里就挂在 /myspace/ 下，写进去的文件会自动同步回\n"
-        "  「我的空间」，不必再登记。路径只有 /myspace/... 这一种写法。\n"
-        f"- 多步骤工作流可以连用多次 bash——{_WS} 在整轮对话内是持久的，\n"
-        "  上一条命令写下的文件下一条命令直接能读。\n"
-        "- 用户上传的文件不会自动出现在沙盒里。需要时先调 \n"
-        f"  sandbox_put_artifact(artifact_id, dest_path) 把它拷进 {_WS}。\n"
-        "- 脚本产出的文件如需让用户下载，调用 sandbox_get_artifact(src_path) 把它\n"
-        "  登记成 artifact——bash 本身不会自动登记产物。\n\n"
+    bash.__doc__ = path_rules().bash_workspace_instructions(WORKSPACE_ROOT, _sess) + (
         "Args:\n"
         "    command (`str`): 完整 shell 命令字符串。可以包含管道、重定向、\n"
         "        here-doc、命令链 (&&, ;, ||) 等任意 bash 语法。\n"

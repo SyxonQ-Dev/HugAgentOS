@@ -312,3 +312,74 @@ def test_project_query_lists_candidates_without_mutating_chat(local_project, mon
         sources.project_sources("stranger", "project")
     monkeypatch.setattr(sources, "current_cloud", lambda: ("https://cloud.example", "b"))
     assert sources.project_sources("owner", "project") == []
+
+
+def test_unbound_site_can_publish_open_edit_and_republish(local_project, monkeypatch, tmp_path):
+    from core.db.models import ChatSession, Project
+    from core.services import local_site_sources as sources
+    from core.services.desktop_site_publish import package_local_site, localize_site_result
+    from core.services.site_listing import list_sites
+    from services.script_runner_service.workspace_paths import session_root
+
+    _, factory = local_project
+    workspace = str(tmp_path / "workspace 中文")
+    monkeypatch.setattr("core.sandbox._common.WORKSPACE", workspace)
+    monkeypatch.setattr("core.llm.tools._paths.WORKSPACE_ROOT", workspace)
+    monkeypatch.setattr(sources, "current_cloud", lambda: ("https://cloud.example", "cloud-user"))
+    with factory() as db:
+        db.get(ChatSession, "chat").project_id = None
+        db.commit()
+    page = Path(session_root(workspace, "chat")) / "sites" / "demo"
+    page.mkdir(parents=True)
+    (page / "index.html").write_text("first")
+
+    async def pack(src, *_args, **_kwargs):
+        return [("index.html", (Path(src) / "index.html").read_bytes())], None
+
+    monkeypatch.setattr("core.services.site_packaging.pack_and_fetch_dir", pack)
+    headers = {"x-current-user-id": "owner", "x-chat-id": "chat"}
+    args = {"src_dir": "sites/demo", "title": "Unbound"}
+    asyncio.run(package_local_site(args, headers))
+    result = {"content": [{"type": "text", "text": json.dumps({
+        "ok": True, "site_id": "unbound-site", "url": "/site/demo/", "version": 1,
+    })}]}
+    localize_site_result(result, "https://cloud.example", args, headers)
+    payload = json.loads(result["content"][0]["text"])
+    assert "local_source_warning" not in payload
+    entry = sources.open_editor("owner", "unbound-site")
+    assert entry["chat_id"] == "chat" and entry["project_id"] == ""
+    assert sources.open_editor("owner", "unbound-site")["chat_id"] == "chat"
+    assert entry["source_dir"] == str(page)
+    assert list_sites("owner", "chat")[0]["editable"] is True
+    assert "unbound-site" in sources.editing_prompt("owner", "chat")
+    (page / "index.html").write_text("edited")
+    update_args = {"site_id": entry["site_id"], "src_dir": entry["publish_dir"]}
+    data, options = asyncio.run(package_local_site(update_args, headers))
+    from core.services.site_packaging import safe_extract_tar
+    assert safe_extract_tar(data) == [("index.html", b"edited")]
+    assert json.loads(options)["site_id"] == "unbound-site"
+    result["content"][0]["text"] = json.dumps({
+        "ok": True, "site_id": "unbound-site", "url": "/site/demo/", "version": 2,
+    })
+    localize_site_result(result, "https://cloud.example", update_args, headers)
+    assert "local_source_warning" not in json.loads(result["content"][0]["text"])
+    assert len(sources.list_sources("owner")) == 1
+    with factory() as db:
+        assert db.get(ChatSession, "chat").project_id is None
+        assert db.query(Project).count() == 1  # no implicit project creation
+    assert sources.list_sources("stranger") == []
+    monkeypatch.setattr(sources, "current_cloud", lambda: ("https://cloud.example", "other-account"))
+    assert sources.list_sources("owner") == []
+    monkeypatch.setattr(sources, "current_cloud", lambda: ("https://cloud.example", "cloud-user"))
+    with factory() as db:
+        chat = db.get(ChatSession, "chat")
+        metadata = dict(chat.extra_data)
+        # A forged receipt cannot expose another conversation's files.
+        metadata["desktop_sites"] = [{**metadata["desktop_sites"][0], "source_dir": str(tmp_path)}]
+        chat.extra_data = metadata
+        db.commit()
+    assert sources.list_sources("owner") == []
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as error:
+        sources.open_editor("owner", "unbound-site")
+    assert error.value.status_code == 404

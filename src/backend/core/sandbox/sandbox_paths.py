@@ -145,3 +145,21 @@ def is_myspace_physical(physical_path: str, user_id: Optional[str], root: str) -
         return False
     prefix = f"{root}/myspace/{user_id}/"
     return physical_path == prefix.rstrip("/") or physical_path.startswith(prefix)
+
+
+def bash_workspace_instructions(root: str, session_id: str | None) -> str:
+    _WS = root
+    return (
+        "在沙盒里执行一条 shell 命令（默认 bash 解释器）。\n\n"
+        "约定：\n"
+        f"- 工作目录默认 {_WS}。已加载的技能文件位于 {_WS}/skills/<skill_id>/，\n"
+        f'  典型用法：bash(command="cd {_WS}/skills/<id> && bash scripts/foo.sh")。\n'
+        "- 用户「我的空间」在沙盒里就挂在 /myspace/ 下，写进去的文件会自动同步回\n"
+        "  「我的空间」，不必再登记。路径只有 /myspace/... 这一种写法。\n"
+        f"- 多步骤工作流可以连用多次 bash——{_WS} 在整轮对话内是持久的，\n"
+        "  上一条命令写下的文件下一条命令直接能读。\n"
+        "- 用户上传的文件不会自动出现在沙盒里。需要时先调 \n"
+        f"  sandbox_put_artifact(artifact_id, dest_path) 把它拷进 {_WS}。\n"
+        "- 脚本产出的文件如需让用户下载，调用 sandbox_get_artifact(src_path) 把它\n"
+        "  登记成 artifact——bash 本身不会自动登记产物。\n\n"
+    )

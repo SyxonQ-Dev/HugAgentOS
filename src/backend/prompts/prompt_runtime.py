@@ -800,6 +800,8 @@ def build_system_prompt(
                 chat_id = str(ctx.get("sandbox_session_id") or ctx.get("chat_id") or "").strip()
                 root = session_root(WORKSPACE, chat_id) if chat_id else WORKSPACE
                 ws_section = _build_default_workspace_section(root)
+                if ctx.get("local_site_edit"):
+                    ws_section += "\n\n" + str(ctx["local_site_edit"])
                 if ws_section:
                     base = (base + "\n\n" + ws_section).strip()
                     _record_section(

@@ -2613,13 +2613,16 @@ async def create_agent_executor(
                 "tools": tool_schemas,
                 "mcp_servers": enabled_mcp_keys,
                 "enabled_kbs": enabled_kb_ids,
+                "chat_id": chat_id,
+                "sandbox_session_id": _sbx_sess,
             }
             # Project mode: let _build_project_section receive project_name / instructions / files / folder
             if project_ctx:
                 _sp_ctx.update(project_ctx)
-                if project_ctx.get("project_is_local") and current_user_id and chat_id:
-                    from core.services.local_site_sources import editing_prompt
-                    _sp_ctx["local_site_edit"] = editing_prompt(str(current_user_id), chat_id)
+            from core.config.local_mode import local_mode_enabled
+            if local_mode_enabled() and current_user_id and chat_id:
+                from core.services.local_site_sources import editing_prompt
+                _sp_ctx["local_site_edit"] = editing_prompt(str(current_user_id), chat_id)
             system_prompt = build_system_prompt(
                 cfg, ctx=_sp_ctx, manifest_builder=_manifest_builder
             )
