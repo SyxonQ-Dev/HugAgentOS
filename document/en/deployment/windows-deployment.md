@@ -183,6 +183,30 @@ docker compose --profile mem0 up -d
 | Repo/storage on `/mnt/c` | Not supported (performance and path-semantics issues); must live on the WSL2 filesystem |
 | Admin "rebuild sandbox dependencies" | Requires a correct `DOCKER_GID`; with a wrong GID the feature degrades gracefully without affecting anything else |
 
+## Where capabilities come from in hybrid mode
+
+In hybrid mode the agent, skill, connector and plugin lists all come from the capabilities
+synced down from the current cloud account. The local service no longer ships default plugins,
+and the built-in skills and connectors that ship with the package take no part either — they are
+neither listed in the capability centre nor assembled, so the model cannot call them. The cloud
+decides what is installed — installing, importing, uninstalling and editing display metadata all
+happen on the cloud account, after which the sidebar offers a sync entry that applies them
+locally when you click it. The device decides what is on — enable state and interface
+contributions are recorded locally, so disabling a plugin withdraws its panels immediately.
+Skills and connectors you created yourself exist only on this machine and are always kept.
+
+Default plugins installed locally by earlier versions (scheduled tasks, skill manager, sites)
+are not deleted; they simply take no part in hybrid mode — not listed, not assembled. Switch the
+machine back to local-only and they work again. Local-only deployments are unaffected and still
+install the default plugins on first start.
+
+The sites plugin also needs a build template on the device (the React template and
+`init-react-site.sh`). That asset follows the plugin: it is provisioned on local install, when a
+cloud sync prepares the plugin, and when a package upgrade refreshes plugins already present — so
+a site-building skill synced from the cloud can still build sites inside a local project, while a
+machine without the plugin gets nothing. Container deployments are unaffected: the sandbox image
+already carries `/opt/site-template`.
+
 ## Plugins and site publishing in hybrid mode
 
 With desktop capabilities v2, both the main agent and subagents first see a plugin directory.
@@ -384,3 +408,15 @@ Choose File → New Window or press Ctrl+Shift+N to open another desktop window.
 Windows share authentication, configuration, and the local service, while conversation navigation
 is independent. Closing one window keeps other visible windows running; the final window uses
 the existing close preference.
+
+
+Chats without a bound project can also publish and edit sites. Source and output directories must remain inside that chat’s durable `.sessions/<chat-hash>/` workspace; publication records are stored on the original chat. Edit reopens that chat without creating a project or switching to a new session directory. Republishing retains the original `site_id`. Editing is unavailable after an account switch, missing source files, or loss of the original chat. Sites whose source binding was not saved by an older client require verification of the original files before restoring the binding; upgrading does not recreate missing source.
+
+
+### Desktop agent environment context
+
+The local backend supplies `environment_context` to regular chats, custom modes and subagents: actual `cwd`, OS, shell, date, timezone, workspace roots and a permission snapshot. Cloud backends do not inject this block.
+
+`cwd` matches the durable session directory used by Bash and relative file paths. The selected project is reported separately as `project_root`; selecting it does not change the execution directory. Use absolute paths for project files and explicitly `cd` to the quoted project directory within each project command. Later calls start from the default directory again.
+
+On Windows, the `bash` tool still uses bundled Git Bash and reports `shell=bash`. Windows-specific guidance is only injected on Windows, not macOS/Linux; invoking another installed shell when needed is not prohibited. The permission preset comes from the current run and directory grants from local configuration; the execution gate remains authoritative. Use `pin_to_workspace(file_paths=[...])` to display references to original project files.
