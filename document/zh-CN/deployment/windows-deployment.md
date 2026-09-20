@@ -371,3 +371,8 @@ GNU 文件命令。构建机下载固定资产并校验大小及 SHA-256，用�
 `cwd` 与 Bash 和文件工具的相对路径基准一致，仍是会话持久目录；绑定项目的真实目录单独标为 `project_root`，不自动切换执行目录。项目文件使用绝对路径；项目命令在同一次调用中先 `cd` 到带引号的真实目录。后续调用仍从默认目录开始。
 
 Windows 的 `bash` 工具继续使用随包 Git Bash，环境块如实标记 `shell=bash`。Windows 专属说明仅在 Windows 注入，macOS/Linux 不包含该段；不禁止按需调用已安装的其他 shell。权限档来自本次运行设置，授权目录来自本机配置，实际操作仍由权限网关检查。项目文件通过 `pin_to_workspace(file_paths=[...])` 展示原文件引用。
+
+### macOS 更新包的归档要求
+
+手动归档 Mac 应用时，使用 desktop/scripts/create-macos-update.py，避免系统 tar 添加 ._* AppleDouble 元数据。
+发布脚本会检查唯一 .app 根目录、禁止的元数据条目及应用版本；检查通过后签名并发布。

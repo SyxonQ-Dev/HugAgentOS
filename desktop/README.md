@@ -533,3 +533,9 @@ Windows 当前执行器为随包 Git Bash，因此声明 `shell=bash`，不声�
 技能说明使用当前工作目录内的相对路径；技能自身脚本通过当前技能真实路径启动，不切换到技能目录写产物。
 包含空格、中文或 Windows 盘符的路径由命令参数引用处理，不依赖工作区映射。
 桌面与容器的路径、技能目录和 runner 工作区规则分别实现；容器继续使用自己的挂载与 My Space 约定。
+
+### macOS 更新归档校验
+
+手动生成 .app.tar.gz 时使用 python3 desktop/scripts/create-macos-update.py --app /path/Example.app --output /path/Example.app.tar.gz --version X.Y.Z。
+不要直接用 macOS 默认 tar 生成更新归档，它可能自动加入 ._* AppleDouble 元数据，导致 Tauri 更新解包失败。
+发布工具会拒绝 AppleDouble 条目、多个应用根目录、路径穿越和与发布版本不一致的 Info.plist。生成归档后再签名，签名后不得改变内容。

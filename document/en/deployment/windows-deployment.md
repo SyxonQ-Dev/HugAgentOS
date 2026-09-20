@@ -420,3 +420,8 @@ The local backend supplies `environment_context` to regular chats, custom modes 
 `cwd` matches the durable session directory used by Bash and relative file paths. The selected project is reported separately as `project_root`; selecting it does not change the execution directory. Use absolute paths for project files and explicitly `cd` to the quoted project directory within each project command. Later calls start from the default directory again.
 
 On Windows, the `bash` tool still uses bundled Git Bash and reports `shell=bash`. Windows-specific guidance is only injected on Windows, not macOS/Linux; invoking another installed shell when needed is not prohibited. The permission preset comes from the current run and directory grants from local configuration; the execution gate remains authoritative. Use `pin_to_workspace(file_paths=[...])` to display references to original project files.
+
+### macOS updater archive requirements
+
+Use desktop/scripts/create-macos-update.py when manually archiving a Mac application. The system tar may add ._* AppleDouble metadata that breaks Tauri update extraction.
+The publisher validates a single .app root, rejects metadata sidecars, and checks the application version. Sign and publish only the validated archive.
