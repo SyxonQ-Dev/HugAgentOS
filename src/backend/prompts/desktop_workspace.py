@@ -1,20 +1,78 @@
-"""Desktop-only runtime instructions and omitted container sections."""
+"""Desktop environment facts; container prompts keep their own path semantics."""
 
-# Authoritative override appended on the desktop LOCAL backend. "My Space" is a
-# cloud concept and does not exist locally; this cancels all the /myspace/ +
-# artifact-net-disk guidance from the base prompt so the model works on the
-# user's real local files instead.
-LOCAL_MODE_OVERRIDE = (
-    "## 【本机模式 · 最高优先级，覆盖上文】\n"
-    "你现在运行在**用户本机电脑**上（桌面本地模式），沙盒就是用户电脑的**真实文件系统**。\n"
-    "**用真实的本机绝对路径直接读写/运行文件**——`Read`/`Write`/`Edit`/`Glob`/`Grep`/`bash` 在本机模式下"
-    "**都接受并推荐使用真实路径**。当前本地项目关联的真实文件夹路径已在项目上下文里给出，直接在它下面操作。\n"
-    "**本机没有「我的空间」**（那是云端概念）：上文所有关于 `/myspace/`、`pin_to_workspace`、"
-    "`list_myspace_files`、`CreateFolder`/`Move`/`Delete` 我的空间、「存到我的空间/留档」的说明，"
-    "在本机模式下**一律不适用，请忽略**，也**不要**往 `/myspace/` 写。\n"
-    "- 交付产物：直接写进用户的真实文件夹即可，他在本机就能看到；不需要 pin 到我的空间。\n"
-    "- 越权目录与危险命令受本机权限策略约束，可能被拦截或需用户确认；改本机文件前系统会自动快照、可回滚。"
-)
+from datetime import datetime
+import platform
+from xml.etree.ElementTree import Element, SubElement, indent, tostring
+
+
+def build_environment_context(ctx: dict, *, current_date: str) -> str:
+    """Describe the actual runner cwd separately from the selected project."""
+    from core.sandbox._common import WORKSPACE
+    from core.sandbox.desktop_paths import workspace_directory
+    from core.llm.tool_permissions import normalize_approval_mode
+    from core.services.local_grant_service import grants_for_gate, policy_for_gate
+
+    session = str(ctx.get("sandbox_session_id") or ctx.get("chat_id") or "").strip()
+    cwd = workspace_directory(WORKSPACE, session)
+    root = Element("environment_context")
+    SubElement(root, "cwd").text = cwd
+    SubElement(root, "os").text = platform.system()
+    # The public bash tool invokes Bash on all platforms, including bundled Git Bash on Windows.
+    from services.script_runner_service.runtime_tools import resolve_bash_executable
+    import os
+    executable = resolve_bash_executable()
+    SubElement(root, "shell").text = os.path.splitext(os.path.basename(executable))[0] if executable else "unavailable"
+    SubElement(root, "shell_executable").text = executable or "unavailable"
+    SubElement(root, "architecture").text = platform.machine()
+    SubElement(root, "os_release").text = platform.release()
+    SubElement(root, "current_date").text = current_date
+    local_time = datetime.now().astimezone()
+    SubElement(root, "timezone").text = local_time.strftime("%Z (UTC%z)")
+    if ctx.get("project_is_local") and ctx.get("project_local_path"):
+        SubElement(root, "project_root").text = str(ctx["project_local_path"])
+    fs = SubElement(root, "filesystem")
+    roots = SubElement(fs, "workspace_roots")
+    SubElement(roots, "root").text = cwd
+    mode = normalize_approval_mode(ctx.get("approval_mode"))
+    try:
+        grants = grants_for_gate()
+        policy = policy_for_gate(mode)
+    except Exception:
+        # Facts unavailable: do not invent permissions. The execution gate remains authoritative.
+        SubElement(fs, "permission_profile", type="unavailable")
+    else:
+        granted = SubElement(fs, "granted_roots")
+        for grant in grants:
+            SubElement(granted, "root", mode=grant.mode).text = grant.path
+        profile = SubElement(fs, "permission_profile", type=mode)
+        SubElement(profile, "workspace_write").text = policy.workspace_write
+        SubElement(profile, "out_of_scope").text = policy.out_of_scope
+    indent(root, space="  ")
+    from prompts.desktop_templates import render_desktop_part
+    return render_desktop_part("environment", environment_xml=tostring(root, encoding="unicode", short_empty_elements=False))
+
+
+def desktop_prompt_text(text: str) -> str:
+    """Desktop owns file-delivery rules; omit the legacy cloud output section.
+
+    Select by its Markdown section boundary, not tool-name substitutions. Other
+    sections (including administrator role/citation instructions) stay intact.
+    Both filesystem templates and database prompt versions use this heading.
+    """
+    import re
+
+    return re.sub(
+        r"(?m)^### 输出约束（强制）[ \t]*\r?\n.*?(?=^#{1,3} |\Z)",
+        "", text, flags=re.DOTALL,
+    ).strip()
+
+
+def build_local_mode_guidance() -> str:
+    from prompts.desktop_templates import render_desktop_part
+    parts = [render_desktop_part("guidance")]
+    if platform.system() == "Windows":
+        parts.append(render_desktop_part("windows"))
+    return "\n".join(p for p in parts if p)
 
 
 SKIP_PARTS = {

@@ -54,3 +54,4 @@ def _forget(task: asyncio.Task) -> None:
     exc = task.exception()
     if exc is not None:
         logger.warning("background_task_failed", task=task.get_name(), error=str(exc))
+

@@ -524,9 +524,18 @@ Windows、macOS、Linux 的“文件 → 新建窗口”打开一个独立桌面
 未绑定本地项目时，每个对话使用 `<数据目录>/workspace/.sessions/<会话哈希>/`。
 同一对话重复运行使用同一目录，不因空闲自动删除；不同对话使用不同目录。
 Bash 的当前目录与文件工具的相对路径基准一致，绝对路径直接指向真实文件，不进行别名改写。
-绑定本地项目时，项目上下文提供项目文件夹的真实路径。
+绑定本地项目时，环境上下文用 `project_root` 单独提供项目真实路径；`cwd` 仍为会话目录。
+项目命令需要在同一次 Bash 调用中显式 `cd` 到带引号的项目路径，文件工具使用项目绝对路径。
+桌面普通会话、自定义模式和子智能体均获得 `environment_context`（cwd、OS、shell、日期、时区与权限快照）。
+Windows 当前执行器为随包 Git Bash，因此声明 `shell=bash`，不声明 PowerShell；云端不注入此环境块。
 
 每次命令的执行脚本使用独立临时文件，命令结束仅清理自己的脚本，避免并发覆盖和删除用户同名文件。
 技能说明使用当前工作目录内的相对路径；技能自身脚本通过当前技能真实路径启动，不切换到技能目录写产物。
 包含空格、中文或 Windows 盘符的路径由命令参数引用处理，不依赖工作区映射。
 桌面与容器的路径、技能目录和 runner 工作区规则分别实现；容器继续使用自己的挂载与 My Space 约定。
+
+### macOS 更新归档校验
+
+手动生成 .app.tar.gz 时使用 python3 desktop/scripts/create-macos-update.py --app /path/Example.app --output /path/Example.app.tar.gz --version X.Y.Z。
+不要直接用 macOS 默认 tar 生成更新归档，它可能自动加入 ._* AppleDouble 元数据，导致 Tauri 更新解包失败。
+发布工具会拒绝 AppleDouble 条目、多个应用根目录、路径穿越和与发布版本不一致的 Info.plist。生成归档后再签名，签名后不得改变内容。

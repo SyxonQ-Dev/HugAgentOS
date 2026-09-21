@@ -200,6 +200,10 @@ _WORKFLOW_MODE_HINT = (
 def _site_mode_hint(project_ctx: Optional[Dict[str, Any]] = None) -> str:
     """建站会话与站点编辑会话的作业规则（会话挂在项目上即为编辑会话）。"""
     ctx = project_ctx or {}
+    from core.config.local_mode import local_mode_enabled
+    if local_mode_enabled():
+        from prompts.desktop_templates import render_desktop_part
+        return "\n\n" + render_desktop_part("site_mode")
     if ctx.get("project_id"):
         folder = str(ctx.get("project_folder_name") or "").strip() or "<项目文件夹>"
         return (
@@ -2465,6 +2469,10 @@ async def create_agent_executor(
             enabled_mcp_keys,
             enabled_kb_ids=enabled_kb_ids,
         )
+        from core.config.local_mode import local_mode_enabled
+        if local_mode_enabled():
+            from prompts.desktop_workspace import desktop_prompt_text
+            system_prompt = desktop_prompt_text(system_prompt)
         _manifest_builder.add_prompt_section(
             "subagent/base",
             system_prompt,
@@ -2575,6 +2583,10 @@ async def create_agent_executor(
 
             # 收窄模式没配专属提示词时退回历史的 turbo 正文——极速模式绑的就是它。
             system_prompt = _mode_prompt or _pvs_turbo.render_turbo_system_prompt()
+            from core.config.local_mode import local_mode_enabled
+            if local_mode_enabled():
+                from prompts.desktop_workspace import desktop_prompt_text
+                system_prompt = desktop_prompt_text(system_prompt)
             _manifest_builder.add_prompt_section(
                 "mode/base",
                 system_prompt,
@@ -2593,6 +2605,10 @@ async def create_agent_executor(
             # 不收窄的模式配了专属提示词：整段替换默认装配（和收窄模式同一语义），
             # 但工具/技能面不动——那是 tool_scope 管的事。
             system_prompt = _mode_prompt
+            from core.config.local_mode import local_mode_enabled
+            if local_mode_enabled():
+                from prompts.desktop_workspace import desktop_prompt_text
+                system_prompt = desktop_prompt_text(system_prompt)
             _manifest_builder.add_prompt_section(
                 "mode/base",
                 system_prompt,
@@ -2615,6 +2631,7 @@ async def create_agent_executor(
                 "enabled_kbs": enabled_kb_ids,
                 "chat_id": chat_id,
                 "sandbox_session_id": _sbx_sess,
+                "approval_mode": approval_mode,
             }
             # Project mode: let _build_project_section receive project_name / instructions / files / folder
             if project_ctx:
@@ -2896,6 +2913,31 @@ async def create_agent_executor(
                 "[factory] +%s update_plan tool registered (chat_id=%s)",
                 _elapsed(),
                 chat_id,
+            )
+
+    # Custom modes and subagents bypass build_system_prompt but execute on the
+    # same desktop runner. Environment facts must survive that prompt choice.
+    from core.config.local_mode import local_mode_enabled
+
+    if local_mode_enabled() and not any(
+        section.id in {"runtime/environment", "runtime/local_mode"}
+        for section, _ in _manifest_builder.prompt_section_sources()
+    ):
+        from datetime import datetime
+        from prompts.desktop_workspace import build_local_mode_guidance, build_environment_context
+
+        environment = build_environment_context(
+            {**(project_ctx or {}), "chat_id": chat_id,
+             "sandbox_session_id": _sbx_sess, "approval_mode": approval_mode},
+            current_date=datetime.now().strftime("%Y-%m-%d"),
+        )
+        for section_id, content in (
+            ("runtime/environment", environment), ("runtime/local_mode", build_local_mode_guidance()),
+        ):
+            system_prompt += "\n\n" + content
+            _manifest_builder.add_prompt_section(
+                section_id, content, origin="builtin:local_mode", trust="platform",
+                priority=950, cache_class="workspace", version="1", sensitive=True,
             )
 
     # Prompt fragments this task type carries, per the active profile.
