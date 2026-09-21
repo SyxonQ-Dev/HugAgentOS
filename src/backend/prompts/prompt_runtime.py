@@ -200,22 +200,7 @@ _TOOLS_AND_SKILLS_NOTICE = (
     "处理请求时先匹配技能描述；没有匹配技能时，再直接调用最合适的 MCP 工具。"
 )
 
-# Authoritative override appended on the desktop LOCAL backend. "My Space" is a
-# cloud concept and does not exist locally; this cancels all the /myspace/ +
-# artifact-net-disk guidance from the base prompt so the model works on the
-# user's real local files instead.
-_LOCAL_MODE_OVERRIDE = (
-    "## 【本机模式 · 最高优先级，覆盖上文】\n"
-    "你现在运行在**用户本机电脑**上（桌面本地模式），沙盒就是用户电脑的**真实文件系统**。\n"
-    "**用真实的本机绝对路径直接读写/运行文件**（例如 `/Users/xxx/Desktop/a.txt`、"
-    "`/Users/xxx/project/main.py`）——`Read`/`Write`/`Edit`/`Glob`/`Grep`/`bash` 在本机模式下"
-    "**都接受并推荐使用真实路径**。当前本地项目关联的真实文件夹路径已在项目上下文里给出，直接在它下面操作。\n"
-    "**本机没有「我的空间」**（那是云端概念）：上文所有关于 `/myspace/`、`pin_to_workspace`、"
-    "`list_myspace_files`、`CreateFolder`/`Move`/`Delete` 我的空间、「存到我的空间/留档」的说明，"
-    "在本机模式下**一律不适用，请忽略**，也**不要**往 `/myspace/` 写。\n"
-    "- 交付产物：直接写进用户的真实文件夹即可，他在本机就能看到；不需要 pin 到我的空间。\n"
-    "- 越权目录与危险命令受本机权限策略约束，可能被拦截或需用户确认；改本机文件前系统会自动快照、可回滚。"
-)
+from prompts.desktop_workspace import LOCAL_MODE_OVERRIDE as _LOCAL_MODE_OVERRIDE
 
 
 def build_subagent_system_prompt(
@@ -803,6 +788,33 @@ def build_system_prompt(
 
     # ── Project mode (when mounted in a Claude-style workspace) ──
     project_id = ctx.get("project_id")
+    if not project_id:
+        try:
+            from core.config.local_mode import local_mode_enabled
+
+            if local_mode_enabled():
+                from core.sandbox._common import WORKSPACE
+                from prompts.project_section import _build_default_workspace_section
+                from services.script_runner_service.workspace_paths import session_root
+
+                chat_id = str(ctx.get("sandbox_session_id") or ctx.get("chat_id") or "").strip()
+                root = session_root(WORKSPACE, chat_id) if chat_id else WORKSPACE
+                ws_section = _build_default_workspace_section(root)
+                if ctx.get("local_site_edit"):
+                    ws_section += "\n\n" + str(ctx["local_site_edit"])
+                if ws_section:
+                    base = (base + "\n\n" + ws_section).strip()
+                    _record_section(
+                        "runtime/default_workspace",
+                        ws_section,
+                        origin="builtin:local_mode",
+                        trust="platform",
+                        priority=900,
+                        cache_class="workspace",
+                        version="1",
+                    )
+        except Exception:
+            pass
     if project_id:
         if ctx.get("project_is_local"):
             # Desktop local project: real host folder, not a MySpace view (#05).

@@ -408,3 +408,6 @@ Choose File → New Window or press Ctrl+Shift+N to open another desktop window.
 Windows share authentication, configuration, and the local service, while conversation navigation
 is independent. Closing one window keeps other visible windows running; the final window uses
 the existing close preference.
+
+
+Chats without a bound project can also publish and edit sites. Source and output directories must remain inside that chat’s durable `.sessions/<chat-hash>/` workspace; publication records are stored on the original chat. Edit reopens that chat without creating a project or switching to a new session directory. Republishing retains the original `site_id`. Editing is unavailable after an account switch, missing source files, or loss of the original chat. Sites whose source binding was not saved by an older client require verification of the original files before restoring the binding; upgrading does not recreate missing source.

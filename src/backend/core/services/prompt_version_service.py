@@ -750,6 +750,18 @@ def render_active_prompt_part(
     return None
 
 
+def _skipped_parts(kind: str) -> set:
+    try:
+        from core.config.local_mode import local_mode_enabled
+
+        if local_mode_enabled():
+            from prompts.desktop_workspace import SKIP_PARTS
+            return SKIP_PARTS.get(kind) or set()
+    except Exception:
+        logger.debug("local-mode check failed while assembling %s", kind, exc_info=True)
+    return set()
+
+
 def render_kind_segment(
     kind: str, db: Optional[Session] = None, *, fs_fallback: bool = True
 ) -> str:
@@ -763,8 +775,9 @@ def render_kind_segment(
     存进库里的是同一份。``fs_fallback=False`` 用于「对话模式」绑定的 kind：绑了个
     空 kind 就该退回默认装配，而不是套用别的 kind 的话术。
     """
+    skip = _skipped_parts(kind)
     try:
-        rendered = render_active_prompt(kind, db=db)
+        rendered = _render_active_parts(kind, db=db, skip=skip)
         if rendered:
             return rendered
     except Exception:
@@ -774,9 +787,28 @@ def render_kind_segment(
     chunks = [
         (p.get("content") or "").strip()
         for p in _read_fs_parts(kind)
-        if p.get("is_enabled", True) and (p.get("content") or "").strip()
+        if p.get("is_enabled", True)
+        and (p.get("content") or "").strip()
+        and (p.get("part_id") or "") not in skip
     ]
     return "\n\n".join(chunks)
+
+
+def _render_active_parts(kind: str, *, db: Optional[Session], skip: set) -> Optional[str]:
+    """激活版本的正文，按 ``skip`` 剔除若干段。``skip`` 为空时等同 render_active_prompt。"""
+    if not skip:
+        return render_active_prompt(kind, db=db)
+    version = get_active_version(kind, db=db)
+    if not version:
+        return None
+    chunks = [
+        (p.get("content") or "").strip()
+        for p in (version.get("parts") or [])
+        if p.get("is_enabled", True)
+        and (p.get("content") or "").strip()
+        and (p.get("part_id") or "").strip() not in skip
+    ]
+    return "\n\n".join(chunks) or None
 
 
 #: 极速模式在库和文件都取不到时的最后兜底——它替换掉整份系统提示词，返回空串会让
